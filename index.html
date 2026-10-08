@@ -345,10 +345,6 @@ function showResetGate(){
 }
 
 async function forgotPassword(){
-  // ...
-}
-
-async function forgotPassword(){
   const email = document.getElementById('authEmail').value.trim();
 
   if(!email){
@@ -358,7 +354,14 @@ async function forgotPassword(){
   }
 
   try{
-    const {error} = await supabaseClient.auth.resetPasswordForEmail(email);
+    if(!supabaseClient){
+      const ok = await connectSupabase(false);
+      if(!ok)return;
+    }
+
+    const {error} = await supabaseClient.auth.resetPasswordForEmail(email, {
+      redirectTo: 'https://raulf8833-beep.github.io/Nivel-Pro-Mantenimiento/'
+    });
 
     if(error) throw error;
 
