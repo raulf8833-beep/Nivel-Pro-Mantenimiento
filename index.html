@@ -25,7 +25,10 @@ label{display:block;font-size:12px;font-weight:700;color:#4c5864;margin:0 0 5px}
 .empty{text-align:center;color:var(--muted);padding:35px 10px}.smallnote{font-size:11px;color:var(--muted);line-height:1.4}
 .catalogPick{position:fixed;inset:0;width:100%;height:100dvh;min-height:100%;background:#0008;z-index:1000;display:none;align-items:flex-start;justify-content:center;padding:12px;overscroll-behavior:none;touch-action:auto;isolation:isolate;pointer-events:auto}.catalogPick.show{display:flex;pointer-events:auto}.catalogPickBox{width:100%;max-width:520px;height:calc(100dvh - 24px);max-height:none;overflow:hidden;overscroll-behavior:contain;background:white;border-radius:18px;padding:14px;box-shadow:0 8px 30px #0003;display:flex;flex-direction:column;touch-action:auto}.catalogPickHead{display:flex;flex:0 0 auto;background:white;z-index:2;padding-bottom:10px;justify-content:space-between;align-items:center;gap:10px;margin-bottom:0}.catalogPickBox #catalogPickSearch{flex:0 0 auto;position:relative;z-index:3}.catalogPickList{margin-top:10px;overflow:auto;overscroll-behavior:contain;flex:1;min-height:0;-webkit-overflow-scrolling:touch}.pickItem{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 8px;border-bottom:1px solid var(--line)}.pickInfo{min-width:0}.pickInfo b{display:block;font-size:14px}.pickInfo span{font-size:11px;color:var(--muted)}
 
-#authGate{position:fixed;inset:0;background:linear-gradient(135deg,#eef3f7,#dfe8f0);z-index:5000;display:none;align-items:center;justify-content:center;padding:18px}.authBox{width:min(430px,100%);background:white;border:1px solid var(--line);border-radius:22px;padding:22px;box-shadow:0 12px 40px #0002}.authBox h2{margin:0 0 6px}.authBox .authSub{font-size:13px;color:var(--muted);margin:0 0 18px}.authMode{display:flex;gap:8px;margin-bottom:14px}.authMode button{flex:1}.authError{font-size:12px;color:#a22;margin:8px 0;min-height:16px}.userPill{display:inline-flex;align-items:center;gap:7px;margin-top:8px;padding:6px 9px;border-radius:20px;background:#eaf3ff;color:#173b63;font-size:11px;font-weight:800}.authGateNote{font-size:11px;color:var(--muted);line-height:1.4;margin-top:12px}.authLogo{text-align:center;margin:0 0 10px}.authLogo img{width:180px;max-width:75%;height:auto;object-fit:contain;display:inline-block}
+#authGate{position:fixed;inset:0;background:linear-gradient(135deg,#eef3f7,#dfe8f0);z-index:5000;display:none;align-items:center;justify-content:center;padding:18px}.authBox{width:min(430px,100%);background:white;border:1px solid var(--line);border-radius:22px;padding:22px;box-shadow:0 12px 40px #0002}.authBox h2{margin:0 0 6px}.authBox .authSub{font-size:13px;color:var(--muted);margin:0 0 18px}.authMode{display:flex;gap:8px;margin-bottom:14px}.authMode button{flex:1}.authError{font-size:12px;color:#a22;margin:8px 0;min-height:16px}.userPill{display:inline-flex;align-items:center;gap:7px;margin-top:8px;padding:6px 9px;border-radius:20px;background:#eaf3ff;color:#173b63;font-size:11px;font-weight:800}.authGateNote{font-size:11px;color:var(--muted);line-height:1.4;margin-top:12px}.authLogo{text-align:center;margin:0 0 10px}
+#resetGate{position:fixed;inset:0;z-index:6000;display:none;align-items:center;justify-content:center;padding:18px;overflow-y:auto;background:linear-gradient(135deg,#eef3f7,#dfe8f0);overscroll-behavior:contain}
+body.recovery-active{overflow:hidden}
+.passwordWrap{position:relative;width:100%}.passwordWrap input{padding-right:48px}.passwordToggle{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:38px;height:38px;padding:0;border:0;border-radius:8px;background:transparent;color:#4c5864;display:flex;align-items:center;justify-content:center;font-size:19px;line-height:1}.passwordToggle:focus-visible{outline:2px solid var(--blue2);outline-offset:1px}.authLogo img{width:180px;max-width:75%;height:auto;object-fit:contain;display:inline-block}
 @media(max-width:600px){.catalogPick{padding:8px}.catalogPickBox{height:calc(100dvh - 16px);border-radius:16px;padding:12px}.catalogPickHead{padding-bottom:8px}.catalogPickBox #catalogPickSearch{font-size:16px}.catalogPickList{margin-top:8px}}
 @media(max-width:420px){.itemgrid{grid-template-columns:1fr 1fr}.itemgrid>div:first-child{grid-column:1/-1}}
 @media(min-width:700px){body{padding:20px}.app{border-radius:25px;overflow:hidden;box-shadow:0 8px 40px #0002}}
@@ -108,7 +111,7 @@ main{padding:0!important;margin:0!important}
     <div class="authMode"><button id="signupModeBtn" class="btn secondary" style="width:100%" type="button" onclick="setAuthMode('signup')">Crear cuenta</button></div>
     <div id="authNameWrap" class="field" style="display:none"><label>Nombre</label><input id="authName" placeholder="Ej.: Raúl"></div>
     <div class="field"><label>E-mail</label><input id="authEmail" type="email" autocomplete="email" placeholder="nombre@correo.com"></div>
-    <div class="field"><label>Contraseña</label><input id="authPassword" type="password" autocomplete="current-password" placeholder="Mínimo 6 caracteres"></div>
+    <div class="field"><label>Contraseña</label><div class="passwordWrap"><input id="authPassword" type="password" autocomplete="current-password" placeholder="Mínimo 6 caracteres"><button class="passwordToggle" type="button" aria-label="Mostrar contraseña" title="Mostrar contraseña" onclick="togglePasswordVisibility('authPassword',this)">👁️</button></div></div>
     <div id="authError" class="authError"></div>
     <button id="authSubmit" class="btn primary" style="width:100%" type="button" onclick="submitAuth()">Ingresar</button>
     <button class="btn secondary" style="width:100%;margin-top:8px" type="button" onclick="forgotPassword()">¿Olvidaste tu contraseña?</button>
@@ -122,12 +125,12 @@ main{padding:0!important;margin:0!important}
 
     <div class="field">
       <label>Nueva contraseña</label>
-      <input id="resetPassword" type="password" autocomplete="new-password" placeholder="Mínimo 6 caracteres">
+      <div class="passwordWrap"><input id="resetPassword" type="password" autocomplete="new-password" placeholder="Mínimo 6 caracteres"><button class="passwordToggle" type="button" aria-label="Mostrar contraseña" title="Mostrar contraseña" onclick="togglePasswordVisibility('resetPassword',this)">👁️</button></div>
     </div>
 
     <div class="field">
       <label>Repetir contraseña</label>
-      <input id="resetPassword2" type="password" autocomplete="new-password" placeholder="Repetí la contraseña">
+      <div class="passwordWrap"><input id="resetPassword2" type="password" autocomplete="new-password" placeholder="Repetí la contraseña"><button class="passwordToggle" type="button" aria-label="Mostrar contraseña" title="Mostrar contraseña" onclick="togglePasswordVisibility('resetPassword2',this)">👁️</button></div>
     </div>
 
     <div id="resetError" class="authError"></div>
@@ -343,6 +346,20 @@ async function updatePassword(){
 function showResetGate(){
   document.getElementById('authGate').style.display = 'none';
   document.getElementById('resetGate').style.display = 'flex';
+  document.body.classList.add('recovery-active');
+}
+function hideResetGate(){
+  document.getElementById('resetGate').style.display = 'none';
+  document.body.classList.remove('recovery-active');
+}
+function togglePasswordVisibility(inputId,button){
+  const input=document.getElementById(inputId);
+  if(!input)return;
+  const show=input.type==='password';
+  input.type=show?'text':'password';
+  button.textContent=show?'🙈':'👁️';
+  button.setAttribute('aria-label',show?'Ocultar contraseña':'Mostrar contraseña');
+  button.setAttribute('title',show?'Ocultar contraseña':'Mostrar contraseña');
 }
 
 function isRecoveryUrl(){
@@ -366,7 +383,7 @@ function registerAuthListener(){
         return;
       }
 
-      document.getElementById('resetGate').style.display='none';
+      hideResetGate();
       if(currentUser){
         hideAuth();
         try{await cloudSyncAll();}catch(e){console.error(e);}
