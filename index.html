@@ -25,6 +25,14 @@ label{display:block;font-size:12px;font-weight:700;color:#4c5864;margin:0 0 5px}
 .empty{text-align:center;color:var(--muted);padding:35px 10px}.smallnote{font-size:11px;color:var(--muted);line-height:1.4}
 .catalogPick{position:fixed;inset:0;width:100%;height:100dvh;min-height:100%;background:#0008;z-index:1000;display:none;align-items:flex-start;justify-content:center;padding:12px;overscroll-behavior:none;touch-action:auto;isolation:isolate;pointer-events:auto}.catalogPick.show{display:flex;pointer-events:auto}.catalogPickBox{width:100%;max-width:520px;height:calc(100dvh - 24px);max-height:none;overflow:hidden;overscroll-behavior:contain;background:white;border-radius:18px;padding:14px;box-shadow:0 8px 30px #0003;display:flex;flex-direction:column;touch-action:auto}.catalogPickHead{display:flex;flex:0 0 auto;background:white;z-index:2;padding-bottom:10px;justify-content:space-between;align-items:center;gap:10px;margin-bottom:0}.catalogPickBox #catalogPickSearch{flex:0 0 auto;position:relative;z-index:3}.catalogPickList{margin-top:10px;overflow:auto;overscroll-behavior:contain;flex:1;min-height:0;-webkit-overflow-scrolling:touch}.pickItem{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 8px;border-bottom:1px solid var(--line)}.pickInfo{min-width:0}.pickInfo b{display:block;font-size:14px}.pickInfo span{font-size:11px;color:var(--muted)}
 
+
+#syncOverlay{position:fixed;inset:0;z-index:7000;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(12,25,40,.48)}
+#syncOverlay.show{display:flex}
+.syncBox{width:min(340px,100%);background:#fff;border-radius:18px;padding:24px 20px;text-align:center;box-shadow:0 14px 45px #0003}
+.syncSpinner{width:38px;height:38px;margin:0 auto 14px;border:4px solid #e2e8ef;border-top-color:var(--blue);border-radius:50%;animation:syncspin .8s linear infinite}
+.syncTitle{font-weight:800;color:var(--blue);font-size:16px}.syncDetail{margin-top:7px;color:var(--muted);font-size:12px;line-height:1.45}
+@keyframes syncspin{to{transform:rotate(360deg)}}
+
 #authGate{position:fixed;inset:0;background:linear-gradient(135deg,#eef3f7,#dfe8f0);z-index:5000;display:none;align-items:center;justify-content:center;padding:18px}.authBox{width:min(430px,100%);background:white;border:1px solid var(--line);border-radius:22px;padding:22px;box-shadow:0 12px 40px #0002}.authBox h2{margin:0 0 6px}.authBox .authSub{font-size:13px;color:var(--muted);margin:0 0 18px}.authMode{display:flex;gap:8px;margin-bottom:14px}.authMode button{flex:1}.authError{font-size:12px;color:#a22;margin:8px 0;min-height:16px}.userPill{display:inline-flex;align-items:center;gap:7px;margin-top:8px;padding:6px 9px;border-radius:20px;background:#eaf3ff;color:#173b63;font-size:11px;font-weight:800}.authGateNote{font-size:11px;color:var(--muted);line-height:1.4;margin-top:12px}.authLogo{text-align:center;margin:0 0 10px}
 #resetGate{position:fixed;inset:0;z-index:6000;display:none;align-items:center;justify-content:center;padding:18px;overflow-y:auto;background:linear-gradient(135deg,#eef3f7,#dfe8f0);overscroll-behavior:contain}
 body.recovery-active{overflow:hidden}
@@ -141,6 +149,9 @@ main{padding:0!important;margin:0!important}
 
   </div>
 </div>
+<div id="syncOverlay" role="status" aria-live="polite" aria-hidden="true">
+  <div class="syncBox"><div class="syncSpinner" aria-hidden="true"></div><div id="syncOverlayTitle" class="syncTitle">Sincronizando con la base de Datos</div><div id="syncOverlayDetail" class="syncDetail">Esperá un momento, por favor.</div></div>
+</div>
 <div class="app">
 <header class="no-print">
   <div class="brand">
@@ -162,15 +173,6 @@ main{padding:0!important;margin:0!important}
     <button class="tile" onclick="show('quotes')"><div class="ico">📋</div><b>Presupuestos</b><span>Enviados y pendientes</span></button>
     <button class="tile" onclick="show('catalog')"><div class="ico">🗂️</div><b>Catálogo</b><span>Materiales y servicios</span></button>
     <button class="tile" onclick="newQuote(true)"><div class="ico">📑</div><b>Duplicar rápido</b><span>Usar el último</span></button>
-  </div>
-  <div class="card" style="margin-top:14px">
-    <b>💾 Copia de seguridad</b>
-    <p class="smallnote">Guardá tus presupuestos y catálogo en un archivo para llevarlos a otro teléfono o computadora.</p>
-    <div class="actions" style="margin-top:10px">
-      <button class="btn primary" onclick="exportData()">💾 Exportar datos</button>
-      <button class="btn secondary" onclick="document.getElementById('importFile').click()">📥 Importar datos</button>
-    </div>
-    <input id="importFile" type="file" accept="application/json,.json" style="display:none" onchange="importData(this)">
   </div>
 </section>
 
@@ -496,15 +498,17 @@ async function cloudInsertCatalog(item){
 async function cloudUpdateCatalog(item){
   if(!supabaseConnected||!supabaseClient||!(item?._supabaseId))return false;
   const row={descripcion:item.name,tipo:item.type,unidad:item.unit,precio:Number(item.price)||0};
-  const {error}=await supabaseClient.from('Catalogo').update(row).eq('id',item._supabaseId);
+  const {data,error}=await supabaseClient.from('Catalogo').update(row).eq('id',item._supabaseId).select('id');
   if(error){console.error(error);return false;}
-  return true;
+  // Supabase puede no devolver error si la política no permite modificar ninguna fila.
+  return Array.isArray(data)&&data.some(r=>String(r.id)===String(item._supabaseId));
 }
 async function cloudDeleteCatalog(item){
-  if(!supabaseConnected||!supabaseClient||!(item?._supabaseId))return true;
-  const {error}=await supabaseClient.from('Catalogo').delete().eq('id',item._supabaseId);
+  if(!supabaseConnected||!supabaseClient||!(item?._supabaseId))return false;
+  const {data,error}=await supabaseClient.from('Catalogo').delete().eq('id',item._supabaseId).select('id');
   if(error){console.error(error);return false;}
-  return true;
+  // No quitamos el elemento local si el registro no fue eliminado realmente en la nube.
+  return Array.isArray(data)&&data.some(r=>String(r.id)===String(item._supabaseId));
 }
 async function syncCatalogWithCloud(){
   if(!supabaseConnected||!supabaseClient)return;
@@ -514,26 +518,43 @@ async function syncCatalogWithCloud(){
     const local=getCatalog();
     const remote=Array.isArray(data)?data:[];
     const used=new Set();
-    const keyOf=(x)=>String(x.name||'').trim().toLowerCase()+'|'+String(x.type||'').trim().toLowerCase()+'|'+String(x.unit||'').trim().toLowerCase();
-    const remoteMap=new Map(remote.map(r=>[String(r.descripcion||'').trim().toLowerCase()+'|'+String(r.tipo||'').trim().toLowerCase()+'|'+String(r.unidad||'').trim().toLowerCase(),r]));
+    const keyOf=(x)=>String(x.name??x.descripcion??'').trim().toLowerCase()+'|'+String(x.type??x.tipo??'').trim().toLowerCase()+'|'+String(x.unit??x.unidad??'').trim().toLowerCase();
+    const remoteById=new Map(remote.map(r=>[String(r.id),r]));
+    const remoteByKey=new Map();
+    for(const r of remote){const k=keyOf(r);if(!remoteByKey.has(k))remoteByKey.set(k,[]);remoteByKey.get(k).push(r);}
+    const localOnlyKeys=new Set();
     const merged=[];
+    const fromRemote=(r)=>({name:r.descripcion||'',type:r.tipo||'Material',unit:r.unidad||'unidad',price:Number(r.precio)||0,_supabaseId:r.id});
     for(const item of local){
-      const r=remoteMap.get(keyOf(item));
-      if(r){merged.push({...item,_supabaseId:r.id});used.add(r.id);}
-      else{
-        const id=await cloudInsertCatalog(item);
-        merged.push(id?{...item,_supabaseId:id}:item);
+      // Si tenemos ID, ese registro manda. Si ya no existe en la nube, no lo resucitamos.
+      if(item._supabaseId!==undefined&&item._supabaseId!==null&&item._supabaseId!==''){
+        const r=remoteById.get(String(item._supabaseId));
+        if(r){merged.push(fromRemote(r));used.add(String(r.id));}
+        continue;
       }
+      // Compatibilidad con catálogos antiguos que todavía no guardaban el ID de Supabase.
+      const k=keyOf(item);
+      const candidates=(remoteByKey.get(k)||[]).filter(r=>!used.has(String(r.id)));
+      if(candidates.length){
+        const r=candidates[0];merged.push(fromRemote(r));used.add(String(r.id));continue;
+      }
+      // No recrear una copia local si la nube ya tiene ese nombre/tipo/unidad.
+      if(remoteByKey.has(k)||localOnlyKeys.has(k))continue;
+      localOnlyKeys.add(k);
+      const id=await cloudInsertCatalog(item);
+      if(id)merged.push({...item,_supabaseId:id});
+      else merged.push(item); // Conservamos el dato local si el alta en nube falla.
     }
-    for(const r of remote){
-      if(used.has(r.id))continue;
-      merged.push({name:r.descripcion||'',type:r.tipo||'Material',unit:r.unidad||'unidad',price:Number(r.precio)||0,_supabaseId:r.id});
-    }
+    // Los registros que solo existen en la nube (incluidos duplicados ya guardados) se conservan,
+    // cada uno con su ID real, para que editar/borrar no afecte a otro registro.
+    for(const r of remote){if(!used.has(String(r.id)))merged.push(fromRemote(r));}
     setCatalog(merged);
     renderCatalog();
     renderCatalogPicker();
+    catalogNeedsSync=false;
     cloudStatus('🟢 Nube conectada',true);
-  }catch(e){console.error('syncCatalogWithCloud',e);cloudStatus('🟡 Nube conectada, sincronización pendiente');}
+    return true;
+  }catch(e){console.error('syncCatalogWithCloud',e);cloudStatus('🟡 Nube conectada, sincronización pendiente');return false;}
 }
 
 // --- Sincronización completa de clientes y presupuestos ---
@@ -646,80 +667,48 @@ const defaultCatalog=[
   {name:'Traslado',unit:'unidad',price:0,type:'Servicio'}
 ];
 let catalogEditingIndex=-1;
+let catalogNeedsSync=false;
 function getCatalog(){
   const raw=JSON.parse(localStorage.getItem('catalog')||'null');
   if(!Array.isArray(raw)){localStorage.setItem('catalog',JSON.stringify(defaultCatalog));return JSON.parse(JSON.stringify(defaultCatalog));}
-  return raw.map(x=>Array.isArray(x)?{name:x[0],unit:x[1],price:Number(x[2])||0,type:(/mano de obra|traslado/i.test(x[0])?'Servicio':'Material')}:{name:x.name||'',unit:x.unit||'unidad',price:Number(x.price)||0,type:x.type||'Material'});
+  return raw.map(x=>{
+    if(Array.isArray(x))return {name:x[0],unit:x[1],price:Number(x[2])||0,type:(/mano de obra|traslado/i.test(x[0])?'Servicio':'Material')};
+    const item={...x,name:x.name||'',unit:x.unit||'unidad',price:Number(x.price)||0,type:x.type||'Material'};
+    // Importante: preservar el ID real de Supabase para poder editar y borrar el registro correcto.
+    if(x._supabaseId!==undefined&&x._supabaseId!==null&&x._supabaseId!=='')item._supabaseId=x._supabaseId;
+    return item;
+  });
 }
 function setCatalog(list){localStorage.setItem('catalog',JSON.stringify(list));}
 
-function exportData(){
-  try{
-    const payload={
-      app:'Nivel Pro Mantenimiento',
-      format:'PRO-MANTENIMIENTO-BACKUP',
-      version:1,
-      exportedAt:new Date().toISOString(),
-      data:{
-        catalog:JSON.parse(localStorage.getItem('catalog')||'null'),
-        quotes:JSON.parse(localStorage.getItem('quotes')||'[]'),
-        nq:Number(localStorage.getItem('nq')||0)
-      }
-    };
-    if(!Array.isArray(payload.data.catalog))payload.data.catalog=JSON.parse(JSON.stringify(defaultCatalog));
-    if(!Array.isArray(payload.data.quotes))payload.data.quotes=[];
-    const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    const stamp=new Date().toISOString().slice(0,10);
-    a.href=url;
-    a.download='Nivel_Pro_Mantenimiento_Backup_'+stamp+'.json';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url),1000);
-    alert('✅ Copia de seguridad exportada correctamente.');
-  }catch(e){
-    alert('No se pudo exportar los datos. Probá nuevamente.');
-  }
-}
-
-function importData(input){
-  const file=input.files&&input.files[0];
-  if(!file)return;
-  const reader=new FileReader();
-  reader.onload=()=>{
-    try{
-      const payload=JSON.parse(reader.result);
-      if(!payload || payload.format!=='PRO-MANTENIMIENTO-BACKUP' || !payload.data || !Array.isArray(payload.data.catalog) || !Array.isArray(payload.data.quotes)){
-        throw new Error('Archivo de respaldo no válido.');
-      }
-      const ok=confirm('⚠️ Importar datos reemplazará los presupuestos y el catálogo actuales de este dispositivo.\n\n¿Querés continuar?');
-      if(!ok)return;
-      localStorage.setItem('catalog',JSON.stringify(payload.data.catalog));
-      localStorage.setItem('quotes',JSON.stringify(payload.data.quotes));
-      const maxQuoteNumber=Math.max(0,...payload.data.quotes.map(q=>{
-        const m=String(q&&q.number||'').match(/(\d+)\s*$/);
-        return m?Number(m[1]):0;
-      }));
-      localStorage.setItem('nq',String(Math.max(Number(payload.data.nq)||0,maxQuoteNumber,payload.data.quotes.length)));
-      input.value='';
-      renderQuotes();
-      renderCatalog();
-      alert('✅ Datos importados correctamente.\n\nLa app ya tiene disponibles los presupuestos y el catálogo del respaldo.');
-      show('home');
-    }catch(e){
-      input.value='';
-      alert('❌ No se pudo importar el archivo. Verificá que sea un respaldo generado por esta app.');
-    }
-  };
-  reader.onerror=()=>{input.value='';alert('❌ No se pudo leer el archivo.');};
-  reader.readAsText(file);
-}
 
 function money(n){return new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:2}).format(Number(n)||0)}
 function today(){return new Date().toISOString().slice(0,10)}
-function show(id){
+function showSyncOverlay(title='Sincronizando con la base de Datos',detail='Esperá un momento, por favor.'){
+ const overlay=document.getElementById('syncOverlay');
+ document.getElementById('syncOverlayTitle').textContent=title;
+ document.getElementById('syncOverlayDetail').textContent=detail;
+ overlay.classList.add('show');overlay.setAttribute('aria-hidden','false');
+}
+function hideSyncOverlay(){
+ const overlay=document.getElementById('syncOverlay');
+ overlay.classList.remove('show');overlay.setAttribute('aria-hidden','true');
+}
+async function show(id){
+ const active=document.querySelector('.screen.active');
+ const leavingCatalog=active?.id==='catalog'&&id!=='catalog'&&catalogNeedsSync;
+ if(leavingCatalog){
+   if(cloudReady()){
+     showSyncOverlay('Sincronizando con la base de Datos','Confirmando los cambios del catálogo…');
+     const ok=await syncCatalogWithCloud();
+     hideSyncOverlay();
+     if(!ok)alert('⚠️ No pudimos confirmar la sincronización del catálogo. Revisá tu conexión antes de seguir.');
+   }else{
+     showSyncOverlay('Guardando cambios del catálogo','No hay conexión con la base de datos; los cambios quedan en este dispositivo.');
+     await new Promise(resolve=>setTimeout(resolve,650));
+     hideSyncOverlay();
+   }
+ }
  document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
  document.getElementById(id).classList.add('active');
  document.querySelectorAll('.bottomnav button').forEach(x=>x.classList.remove('active'));
@@ -832,7 +821,7 @@ function checkCatalogChanges(){
   const cat=list[it.catalogIndex];
   if(!cat){it.catalogSnapshot={...now};return;}
   const save=confirm('El ítem “'+(original.name||it.name)+'” fue modificado. ¿Querés guardar estos cambios en el catálogo?');
-  if(save){cat.name=now.name;cat.unit=now.unit;cat.price=now.price;cat.type=now.type;changed=true;if(supabaseConnected)cloudUpdateCatalog(cat);}
+  if(save){cat.name=now.name;cat.unit=now.unit;cat.price=now.price;cat.type=now.type;changed=true;if(supabaseConnected)cloudUpdateCatalog(cat).then(ok=>{if(!ok)alert('⚠️ No se pudo actualizar ese ítem en la nube. Revisá el catálogo antes de continuar.');});}
   // La decisión ya fue tomada: no volver a preguntar al abrir/generar el mismo presupuesto.
   it.catalogSnapshot={...now};
   it.type=now.type;
@@ -884,6 +873,10 @@ function generate(){
 async function saveQuote(){
  if(!currentQuote)return;
  if(!currentUser){showAuth('Ingresá con una cuenta para guardar presupuestos.');return;}
+ const cloudWasReady=cloudReady();
+ let quoteSyncSucceeded=!cloudWasReady;
+ let quoteSyncError='';
+ showSyncOverlay(cloudWasReady?'Sincronizando con la base de Datos':'Guardando presupuesto','Esperá mientras se guarda el presupuesto…');
  let q=JSON.parse(localStorage.getItem('quotes')||'[]');
  const saved={...currentQuote,savedAt:new Date().toISOString()};
  if(editingQuoteIndex>=0 && q[editingQuoteIndex]){
@@ -903,12 +896,18 @@ async function saveQuote(){
      saved.createdBy=saved.createdBy||actorName;
      saved.modifiedBy=actorName;
      saved.modifiedAt=new Date().toISOString();
-     q[editingQuoteIndex]=saved;}
-   catch(e){console.error(e);alert('⚠️ El presupuesto se guardó en este dispositivo, pero no pudo sincronizarse con la nube.\n\n'+(e?.message||String(e)));}
+     q[editingQuoteIndex]=saved;
+     quoteSyncSucceeded=true;}
+   catch(e){console.error(e);quoteSyncSucceeded=false;quoteSyncError=e?.message||String(e);}
  }
  localStorage.setItem('quotes',JSON.stringify(q));
  localStorage.setItem('nq',String(Math.max(q.length,Number(localStorage.getItem('nq')||0))));
- alert(cloudReady()?'☁️ Presupuesto guardado y sincronizado.':'Presupuesto guardado en este dispositivo.');
+ hideSyncOverlay();
+ if(quoteSyncSucceeded){
+   alert(cloudWasReady?'☁️ Presupuesto guardado y sincronizado.':'Presupuesto guardado en este dispositivo.');
+ }else{
+   alert('⚠️ El presupuesto quedó guardado en este dispositivo, pero no se pudo sincronizar con la nube.\n\n'+quoteSyncError);
+ }
  show('quotes');
 }
 function renderQuotes(){
@@ -1010,7 +1009,7 @@ async function saveCatalogItem(){
    }
    list[catalogEditingIndex]=item;
  }
- setCatalog(list);cancelCatalogItem();renderCatalog();renderCatalogPicker();
+ setCatalog(list);catalogNeedsSync=true;cancelCatalogItem();renderCatalog();renderCatalogPicker();
 }
 function cancelCatalogItem(){catalogEditingIndex=-1;document.getElementById('catalogForm').style.display='none'}
 async function deleteCatalogItem(i){
@@ -1020,7 +1019,7 @@ async function deleteCatalogItem(i){
    const ok=await cloudDeleteCatalog(item);
    if(!ok){alert('No se pudo borrar el ítem de la nube.');return;}
  }
- list.splice(i,1);setCatalog(list);renderCatalog();renderCatalogPicker();
+ list.splice(i,1);setCatalog(list);catalogNeedsSync=true;renderCatalog();renderCatalogPicker();
 }
 function printQuote(){
  const imgs=[...document.querySelectorAll('#previewScreen img')];
