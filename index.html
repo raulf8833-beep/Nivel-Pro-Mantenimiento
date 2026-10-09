@@ -268,6 +268,7 @@ let supabaseConnected=false;
 let currentUser=null;
 let currentUserName='';
 let authMode='login';
+let authListenerRegistered=false;
 function setAuthMode(mode){
   authMode=mode;
   const signup=mode==='signup';
@@ -330,19 +331,50 @@ async function updatePassword(){
 
     document.getElementById('resetError').textContent =
       '✅ Contraseña cambiada correctamente.';
+    if(window.history && window.history.replaceState){
+      window.history.replaceState(null,document.title,window.location.pathname+window.location.search);
+    }
 
   }catch(e){
     document.getElementById('resetError').textContent =
       e?.message || String(e);
   }
 }
-async function updatePassword(){
-  // ...
-}
-
 function showResetGate(){
   document.getElementById('authGate').style.display = 'none';
   document.getElementById('resetGate').style.display = 'flex';
+}
+
+function isRecoveryUrl(){
+  return window.location.hash.includes('type=recovery') ||
+         window.location.search.includes('type=recovery');
+}
+
+function registerAuthListener(){
+  if(!supabaseClient || authListenerRegistered)return;
+  authListenerRegistered=true;
+  supabaseClient.auth.onAuthStateChange((event,session)=>{
+    // Defer app work until Supabase has finished its auth callback.
+    setTimeout(async()=>{
+      currentUser=session?.user||null;
+      currentUserName=currentUser?.user_metadata?.full_name||currentUser?.user_metadata?.name||currentUser?.email||'';
+      setUserUI();
+
+      if(event==='PASSWORD_RECOVERY' || isRecoveryUrl()){
+        hideAuth();
+        showResetGate();
+        return;
+      }
+
+      document.getElementById('resetGate').style.display='none';
+      if(currentUser){
+        hideAuth();
+        try{await cloudSyncAll();}catch(e){console.error(e);}
+      }else{
+        showAuth();
+      }
+    },0);
+  });
 }
 
 async function forgotPassword(){
@@ -416,12 +448,17 @@ async function connectSupabase(showAlerts=true){
     const key=getSupabaseKey();
     if(!key)throw new Error('Falta configurar la Publishable Key de Supabase.');
     supabaseClient=window.supabase.createClient(SUPABASE_URL,key);
+    registerAuthListener();
     const {error}=await supabaseClient.from('Catalogo').select('id').limit(1);
     if(error)throw error;
     supabaseConnected=true;
     cloudStatus('🟢 Nube conectada',true);
     const authenticated=await loadAuthSession();
-    if(authenticated){await cloudSyncAll();}
+    if(isRecoveryUrl()){
+      showResetGate();
+    }else if(authenticated){
+      await cloudSyncAll();
+    }
     if(showAlerts)alert(authenticated?'☁️ Nube conectada y usuario identificado.':'☁️ Supabase conectado.\n\nAhora ingresá con la cuenta de la empresa.');
     return true;
   }catch(e){
@@ -1041,29 +1078,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
     showAuth();
   }
 
-  if(supabaseClient){
-    supabaseClient.auth.onAuthStateChange(async(_event,session)=>{
-      currentUser=session?.user||null;
-      currentUserName=currentUser?.user_metadata?.full_name||currentUser?.user_metadata?.name||currentUser?.email||'';
-      setUserUI();
-
-      if(currentUser){
-        if(window.location.hash.includes('type=recovery')){
-          hideAuth();
-          showResetGate();
-        }else{
-          hideAuth();
-          try{
-            await cloudSyncAll();
-          }catch(e){
-            console.error(e);
-          }
-        }
-      }else{
-        showAuth();
-      }
-    });
-  }
+  if(supabaseClient && isRecoveryUrl())showResetGate();
 });
 </script>
 </body></html>
