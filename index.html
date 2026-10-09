@@ -262,6 +262,7 @@ main{padding:0!important;margin:0!important}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 const SUPABASE_URL='https://qejhzarlhlkgqouqkezl.supabase.co';
+const SUPABASE_KEY='sb_publishable_7ddsTySNFBvWhohiKuK3fQ_k_z883bM';
 let supabaseClient=null;
 let supabaseConnected=false;
 let currentUser=null;
@@ -408,18 +409,12 @@ function cloudStatus(text,ok=false){
   const el=document.getElementById('cloudStatus');
   if(el){el.textContent=text;el.style.color=ok?'#1b7f3a':'#6d7885';}
 }
-function getSupabaseKey(){return localStorage.getItem('supabase_publishable_key')||''}
+function getSupabaseKey(){return SUPABASE_KEY}
 async function connectSupabase(showAlerts=true){
   try{
-    if(typeof window.supabase==='undefined')throw new Error('No se pudo cargar la biblioteca de Supabase.');
-    let key=getSupabaseKey();
-    if(!key){
-      key=prompt('Pegá aquí la Publishable Key de tu proyecto Supabase.\n\nLa app la guardará solo en este dispositivo.');
-      if(!key)return false;
-      key=key.trim();
-      if(!key)return false;
-      localStorage.setItem('supabase_publishable_key',key);
-    }
+    if(typeof window.supabase==='undefined')throw new Error('No se pudo cargar la biblioteca de Supabase.'); 
+    const key=getSupabaseKey();
+    if(!key)throw new Error('Falta configurar la Publishable Key de Supabase.');
     supabaseClient=window.supabase.createClient(SUPABASE_URL,key);
     const {error}=await supabaseClient.from('Catalogo').select('id').limit(1);
     if(error)throw error;
