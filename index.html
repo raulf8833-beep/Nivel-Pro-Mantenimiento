@@ -289,6 +289,23 @@ function showAuth(message=''){
   document.getElementById('authError').textContent=message||'';
 }
 function hideAuth(){document.getElementById('authGate').style.display='none';}
+function returnToHomeAfterLogin(){
+  // Cada inicio de sesión comienza siempre en el menú principal, nunca en una
+  // pantalla que haya quedado abierta antes de salir.
+  if(document.body.dataset.catalogPickerOpen==='1'){
+    try{closeCatalogPicker(true)}catch(e){}
+  }
+  document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
+  const home=document.getElementById('home');
+  if(home)home.classList.add('active');
+  document.querySelectorAll('.bottomnav button').forEach(x=>x.classList.remove('active'));
+  if(typeof navHome!=='undefined'&&navHome)navHome.classList.add('active');
+  const search=document.getElementById('catalogSearch');
+  if(search)search.value='';
+  const pickSearch=document.getElementById('catalogPickSearch');
+  if(pickSearch)pickSearch.value='';
+  window.scrollTo({top:0,behavior:'auto'});
+}
 function setUserUI(){
   const pill=document.getElementById('userPill'),logout=document.getElementById('logoutBtn');
   if(currentUser){pill.style.display='inline-flex';pill.textContent='👤 '+(currentUserName||currentUser.email||'Usuario');logout.style.display='inline-block';}
@@ -373,22 +390,21 @@ function registerAuthListener(){
   if(!supabaseClient || authListenerRegistered)return;
   authListenerRegistered=true;
   supabaseClient.auth.onAuthStateChange((event,session)=>{
-    // Defer app work until Supabase has finished its auth callback.
-    setTimeout(async()=>{
+    // Solo actualizamos la interfaz desde el listener. La sincronización la
+    // coordina cloudSyncAll para evitar dos sincronizaciones simultáneas al entrar.
+    setTimeout(()=>{
       currentUser=session?.user||null;
       currentUserName=currentUser?.user_metadata?.full_name||currentUser?.user_metadata?.name||currentUser?.email||'';
       setUserUI();
-
       if(event==='PASSWORD_RECOVERY' || isRecoveryUrl()){
         hideAuth();
         showResetGate();
         return;
       }
-
       hideResetGate();
       if(currentUser){
         hideAuth();
-        try{await cloudSyncAll();}catch(e){console.error(e);}
+        if(event==='SIGNED_IN' || event==='INITIAL_SESSION')returnToHomeAfterLogin();
       }else{
         showAuth();
       }
@@ -436,20 +452,44 @@ async function submitAuth(){
       if(!name){document.getElementById('authError').textContent='Ingresá el nombre de quien usará esta cuenta.';return;}
       const {data,error}=await supabaseClient.auth.signUp({email,password,options:{data:{full_name:name}}});
       if(error)throw error;
-      if(data.session){await loadAuthSession();await cloudSyncAll();alert('✅ Cuenta creada y sesión iniciada.');}
+      if(data.session){await loadAuthSession();const synced=await cloudSyncAll();returnToHomeAfterLogin();if(!synced)alert('⚠️ La cuenta se creó, pero la sincronización quedó pendiente.');else alert('✅ Cuenta creada y sesión iniciada.');}
       else{document.getElementById('authError').textContent='Cuenta creada. Revisá el correo para confirmar la cuenta y luego ingresá.';}
     }else{
       const {data,error}=await supabaseClient.auth.signInWithPassword({email,password});
       if(error)throw error;
-      currentUser=data.user;currentUserName=data.user.user_metadata?.full_name||data.user.user_metadata?.name||data.user.email||'Usuario';setUserUI();hideAuth();await cloudSyncAll();
+      currentUser=data.user;currentUserName=data.user.user_metadata?.full_name||data.user.user_metadata?.name||data.user.email||'Usuario';setUserUI();hideAuth();const synced=await cloudSyncAll();returnToHomeAfterLogin();if(!synced)alert('⚠️ Iniciaste sesión, pero no se pudo completar la sincronización. Revisá tu conexión.');
     }
   }catch(e){document.getElementById('authError').textContent=e?.message||String(e);}
   finally{document.getElementById('authSubmit').disabled=false;}
 }
 async function logoutUser(){
   if(!supabaseClient)return;
-  await supabaseClient.auth.signOut();
-  currentUser=null;currentUserName='';setUserUI();showAuth();
+  if(!currentUser){showAuth();return;}
+  const btn=document.getElementById('logoutBtn');
+  if(btn){btn.disabled=true;btn.textContent='Sincronizando…';}
+  showSyncOverlay('🔴 Sincronizando con la nube','Guardando y comprobando los últimos cambios antes de salir…');
+  try{
+    const synced=await cloudSyncAll();
+    if(!synced){
+      hideSyncOverlay();
+      alert('⚠️ No pudimos completar la sincronización final. Seguís dentro de la aplicación para que puedas intentarlo nuevamente. Revisá la conexión.');
+      return;
+    }
+    showSyncOverlay('🟢 Sincronizado','Los datos están al día. Cerrando sesión…');
+    await new Promise(resolve=>setTimeout(resolve,650));
+    const {error}=await supabaseClient.auth.signOut();
+    if(error)throw error;
+    currentUser=null;currentUserName='';setUserUI();
+    // Volver al estado inicial también evita conservar la pantalla/filtro anterior.
+    returnToHomeAfterLogin();
+    showAuth();
+  }catch(e){
+    console.error('logoutUser',e);
+    alert('⚠️ No se pudo cerrar la sesión correctamente: '+(e?.message||String(e)));
+  }finally{
+    hideSyncOverlay();
+    if(btn){btn.disabled=false;btn.textContent='Salir';}
+  }
 }
 async function requireAuth(){
   if(!supabaseClient){showAuth();return false;}
@@ -477,6 +517,7 @@ async function connectSupabase(showAlerts=true){
       showResetGate();
     }else if(authenticated){
       await cloudSyncAll();
+      returnToHomeAfterLogin();
     }
     if(showAlerts)alert(authenticated?'☁️ Nube conectada y usuario identificado.':'☁️ Supabase conectado.\n\nAhora ingresá con la cuenta de la empresa.');
     return true;
@@ -511,7 +552,7 @@ async function cloudDeleteCatalog(item){
   return Array.isArray(data)&&data.some(r=>String(r.id)===String(item._supabaseId));
 }
 async function syncCatalogWithCloud(){
-  if(!supabaseConnected||!supabaseClient)return;
+  if(!supabaseConnected||!supabaseClient)return false;
   try{
     const {data,error}=await supabaseClient.from('Catalogo').select('id,descripcion,tipo,unidad,precio').order('id',{ascending:true});
     if(error)throw error;
@@ -651,10 +692,30 @@ async function syncQuotesWithCloud(){
   localStorage.setItem('nq',String(Math.max(Number(localStorage.getItem('nq')||0),maxN)));
   renderQuotes();
 }
+let cloudSyncAllPromise=null;
 async function cloudSyncAll(){
-  await syncCatalogWithCloud();
-  await syncQuotesWithCloud();
-  cloudStatus('🟢 Sincronizado',true);
+  if(!cloudReady()){
+    cloudStatus('🔴 Sincronización pendiente');
+    return false;
+  }
+  // Si el listener, la carga inicial o el botón de acceso solicitan sincronizar
+  // al mismo tiempo, comparten una única operación y no insertan dos veces.
+  if(cloudSyncAllPromise)return await cloudSyncAllPromise;
+  cloudSyncAllPromise=(async()=>{
+    try{
+      const catalogOk=await syncCatalogWithCloud();
+      if(catalogOk!==true)throw new Error('No se pudo sincronizar el catálogo.');
+      await syncQuotesWithCloud();
+      cloudStatus('🟢 Sincronizado',true);
+      return true;
+    }catch(e){
+      console.error('cloudSyncAll',e);
+      cloudStatus('🔴 Sincronización pendiente');
+      return false;
+    }
+  })();
+  try{return await cloudSyncAllPromise;}
+  finally{cloudSyncAllPromise=null;}
 }
 
 let items=[], template=1, currentQuote=null, editingQuoteIndex=-1;
