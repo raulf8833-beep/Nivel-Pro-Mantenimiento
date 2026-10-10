@@ -557,7 +557,9 @@ async function syncCatalogWithCloud(){
     const {data,error}=await supabaseClient.from('Catalogo').select('id,descripcion,tipo,unidad,precio').order('id',{ascending:true});
     if(error)throw error;
     const local=getCatalog();
-    const remote=Array.isArray(data)?data:[];
+    // Estos seis IDs corresponden a los artículos de prueba heredados confirmados por el usuario.
+    // No se eliminan de Supabase desde el cliente; simplemente dejan de entrar al catálogo activo.
+    const remote=(Array.isArray(data)?data:[]).filter(r=>!retiredLegacyCatalogIds.has(String(r.id)));
     const used=new Set();
     const keyOf=(x)=>String(x.name??x.descripcion??'').trim().toLowerCase()+'|'+String(x.type??x.tipo??'').trim().toLowerCase()+'|'+String(x.unit??x.unidad??'').trim().toLowerCase();
     const remoteById=new Map(remote.map(r=>[String(r.id),r]));
@@ -573,7 +575,10 @@ async function syncCatalogWithCloud(){
         if(r){merged.push(fromRemote(r));used.add(String(r.id));}
         continue;
       }
-      // Compatibilidad con catálogos antiguos que todavía no guardaban el ID de Supabase.
+      // No reinsertar entradas locales antiguas con estos nombres si no tienen ID real de Supabase.
+      const legacyName=String(item.name||'').trim().toLowerCase();
+      if(legacyDefaultCatalogNames.has(legacyName))continue;
+      // Compatibilidad con otros catálogos antiguos que todavía no guardaban el ID de Supabase.
       const k=keyOf(item);
       const candidates=(remoteByKey.get(k)||[]).filter(r=>!used.has(String(r.id)));
       if(candidates.length){
@@ -719,14 +724,14 @@ async function cloudSyncAll(){
 }
 
 let items=[], template=1, currentQuote=null, editingQuoteIndex=-1;
-const defaultCatalog=[
-  {name:'Machimbre de pino',unit:'m²',price:0,type:'Material'},
-  {name:'Cielorraso de PVC',unit:'m²',price:0,type:'Material'},
-  {name:'Alfajía',unit:'m',price:0,type:'Material'},
-  {name:'Perfil U',unit:'m',price:0,type:'Material'},
-  {name:'Mano de obra',unit:'unidad',price:0,type:'Servicio'},
-  {name:'Traslado',unit:'unidad',price:0,type:'Servicio'}
-];
+// El catálogo comienza vacío si todavía no hay datos locales; no volver a sembrar artículos de prueba antiguos.
+const defaultCatalog=[];
+// IDs exactos de los seis registros de prueba antiguos identificados en Supabase.
+// Se excluyen de la vista/sincronización de la app sin borrar datos de la base de datos.
+const retiredLegacyCatalogIds=new Set(['3','4','5','6','124','125']);
+const legacyDefaultCatalogNames=new Set([
+  'machimbre de pino','cielorraso de pvc','alfajía','perfil u','mano de obra','traslado'
+]);
 let catalogEditingIndex=-1;
 let catalogNeedsSync=false;
 function getCatalog(){
